@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">xcanplayer</string>
+    <!-- 스마트폰 바탕화면 아이콘 아래에 표시될 공식 브랜드명입니다 -->
+    <string name="app_name">XCAN PLAYER</string>
 </resources>

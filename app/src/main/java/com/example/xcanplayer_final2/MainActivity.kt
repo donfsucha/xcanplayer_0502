@@ -11,6 +11,7 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.cna.xcanplayer.R
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
@@ -41,6 +42,15 @@ class MainActivity : AppCompatActivity() {
         supportActionBar?.hide()
 
         webView = findViewById(R.id.webView)
+        // 1. 웹뷰 엔진 설정: 자바스크립트를 켜서 최신 웹페이지나 영상이 제대로 작동하게 합니다.
+        webView.settings.javaScriptEnabled = true
+
+        // (선택) 웹페이지가 화면 크기에 맞게 쏙 들어가도록 설정합니다.
+        webView.settings.loadWithOverviewMode = true
+        webView.settings.useWideViewPort = true
+
+        // 2. 테스트 접속: 화면이 잘 나오는지 확인하기 위해 구글 메인 화면을 불러옵니다.
+        // 나중에 이 부분을 사용자님이 원하시는 진짜 영상 주소로 바꾸시면 됩니다!
         fullscreenContainer = findViewById(R.id.fullscreen_container)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnSchedule = findViewById(R.id.btnSchedule)
