@@ -1,4 +1,4 @@
-package com.example.xcanplayer_final2
+package com.cnanfc.xcanplayer
 
 import android.graphics.Color
 import android.view.View

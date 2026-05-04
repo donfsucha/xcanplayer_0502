@@ -1,22 +1,33 @@
-package com.example.xcanplayer_final2
+package com.cnanfc.xcanplayer
 
+import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log // 실시간 주소 추적을 위한 로그 도구 추가
 import android.webkit.CookieManager
+import android.webkit.WebView
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.cna.xcanplayer.R
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var webView: android.webkit.WebView
+    // 언제든 꺼내 쓸 수 있는 정확한 고정 주소(상수) 모음
+    companion object {
+        private const val LIVING_LIFE_URL =
+            "https://www.fondant.kr/series/00090200-0000-0000-0000-00000000071b?category=episode"
+
+        private const val BIBLE_READING_URL =
+            "https://www.fondant.kr/series/00090228-5db3-dc44-3c29-52bcaf0002ce?category=episode"
+    }
+
+    private lateinit var webView: WebView
     private lateinit var fullscreenContainer: FrameLayout
     private lateinit var btnSpeed: TextView
     private lateinit var btnSchedule: ImageButton
@@ -30,27 +41,16 @@ class MainActivity : AppCompatActivity() {
     private var scheduleList = mutableListOf<ScheduleItem>()
     private val scheduleCheckHandler = Handler(Looper.getMainLooper())
 
-    // 마지막으로 실제 적용한 URL
     private var lastAppliedUrl = ""
-
-    // 스케줄 팝업에서 수정 여부
     private var isScheduleModified = false
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         supportActionBar?.hide()
 
         webView = findViewById(R.id.webView)
-        // 1. 웹뷰 엔진 설정: 자바스크립트를 켜서 최신 웹페이지나 영상이 제대로 작동하게 합니다.
-        webView.settings.javaScriptEnabled = true
-
-        // (선택) 웹페이지가 화면 크기에 맞게 쏙 들어가도록 설정합니다.
-        webView.settings.loadWithOverviewMode = true
-        webView.settings.useWideViewPort = true
-
-        // 2. 테스트 접속: 화면이 잘 나오는지 확인하기 위해 구글 메인 화면을 불러옵니다.
-        // 나중에 이 부분을 사용자님이 원하시는 진짜 영상 주소로 바꾸시면 됩니다!
         fullscreenContainer = findViewById(R.id.fullscreen_container)
         btnSpeed = findViewById(R.id.btnSpeed)
         btnSchedule = findViewById(R.id.btnSchedule)
@@ -73,10 +73,10 @@ class MainActivity : AppCompatActivity() {
             checkAndApplyOrientation()
         }
 
+        // ★ 핵심 수정: MainActivity의 자체 웹뷰 설정을 지우고, Controller 하나만 믿고 갑니다!
         webController.setupWebView()
         setupButtons()
 
-        // 첫 실행 시 너무 빨리 붙지 않도록 약간 지연 후 현재 시간대 스케줄 적용
         webView.postDelayed({
             applyScheduleNow(force = true, showToast = false)
         }, 1200L)
@@ -86,8 +86,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-
-        // 앱 복귀 시에도 현재 시간대 기준으로 다시 확인
         webView.postDelayed({
             applyScheduleNow(force = false, showToast = false)
         }, 500L)
@@ -133,7 +131,6 @@ class MainActivity : AppCompatActivity() {
 
             scheduleUiController.showScheduleDialog(scheduleList) {
                 checkAndApplyOrientation()
-
                 if (isScheduleModified) {
                     applyScheduleNow(force = true, showToast = true)
                 }
@@ -143,6 +140,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyScheduleNow(force: Boolean, showToast: Boolean) {
         val targetUrl = getUrlForCurrentTime()
+
+        // 로그 추가: 개발자가 실시간으로 이동하려는 주소를 모니터링 할 수 있습니다.
+        Log.d("XCAN_SCHEDULE", "force=$force targetUrl=$targetUrl lastAppliedUrl=$lastAppliedUrl")
+
         if (targetUrl.isBlank()) return
 
         if (!force && normalizeUrl(targetUrl) == normalizeUrl(lastAppliedUrl)) {
@@ -157,28 +158,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ★ 새 기능: 스케줄에 저장된 이름(타이틀)을 분석하여 올바른 URL로 강제 보정합니다.
+    private fun resolveScheduleUrl(item: ScheduleItem): String {
+        val title = item.title.replace("\\s".toRegex(), "")
+        val url = item.url.trim()
+
+        return when {
+            title.contains("생명의삶") || url.contains("00090200-0000-0000-0000-00000000071b") -> {
+                LIVING_LIFE_URL
+            }
+
+            title.contains("성경통독") ||
+                    title.contains("일일통독") ||
+                    title.contains("통독") ||
+                    url.contains("00090228-5db3-dc44-3c29-52bcaf0002ce") -> {
+                if (url.isNotBlank()) url else BIBLE_READING_URL
+            }
+
+            else -> url
+        }
+    }
+
+    // 보정 로직이 탑재된 시간표 확인 기능
     private fun getUrlForCurrentTime(): String {
-        if (scheduleList.isEmpty()) return FondantDefaults.QT_URL
+        if (scheduleList.isEmpty()) return BIBLE_READING_URL
 
         val now = Calendar.getInstance()
         val curMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
 
-        var matchedUrl = scheduleList.last().url
-        for (item in scheduleList) {
+        val sortedList = scheduleList.sortedWith(
+            compareBy<ScheduleItem> { it.hour }.thenBy { it.minute }
+        )
+
+        var matchedUrl = resolveScheduleUrl(sortedList.last())
+
+        for (item in sortedList) {
             val itemMinutes = item.hour * 60 + item.minute
             if (itemMinutes <= curMinutes) {
-                matchedUrl = item.url
+                matchedUrl = resolveScheduleUrl(item)
             } else {
                 break
             }
         }
+
         return matchedUrl
     }
 
     private fun startScheduleChecker() {
         scheduleCheckHandler.postDelayed(object : Runnable {
             override fun run() {
-                // "지금 시간대" 기준으로 계속 재판단
                 applyScheduleNow(force = false, showToast = false)
                 scheduleCheckHandler.postDelayed(this, 15000L)
             }

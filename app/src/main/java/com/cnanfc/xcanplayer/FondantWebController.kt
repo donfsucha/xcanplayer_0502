@@ -1,10 +1,9 @@
-package com.example.xcanplayer_final2
+package com.cnanfc.xcanplayer
 
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.view.View
 import android.webkit.CookieManager
@@ -27,6 +26,8 @@ class FondantWebController(
         private const val PREF_NAME = "fondant_runtime"
         private const val KEY_LAST_BIBLE_URL = "key_last_bible_url"
         private const val KEY_LAST_BIBLE_POSITION = "key_last_bible_position"
+        // [GPT 수정 1] 초기화 적용 여부를 확인하는 키 추가
+        private const val KEY_RESUME_FIX_APPLIED = "key_resume_fix_applied_v2"
     }
 
     var customView: View? = null
@@ -56,6 +57,12 @@ class FondantWebController(
         fun onBibleProgress(url: String, seconds: Double) {
             saveBibleResumePosition(url, seconds)
         }
+
+        // [GPT 수정 2] 영상이 끝났을 때 위치를 지우는 함수 추가
+        @JavascriptInterface
+        fun onBibleEpisodeEnded(url: String) {
+            clearBibleResumePosition(url)
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
@@ -75,6 +82,9 @@ class FondantWebController(
 
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
         webView.setBackgroundColor(Color.TRANSPARENT)
+
+        // [GPT 수정 3] 처음 실행 시 오염된 위치 정보 1회 강제 초기화
+        clearCorruptedResumePositionOnce()
 
         try {
             webView.removeJavascriptInterface("AndroidBot")
@@ -194,9 +204,21 @@ class FondantWebController(
         webView.evaluateJavascript(js, null)
     }
 
+    // [GPT 수정 5] 새 영상으로 바뀌면 위치를 0초로 초기화
     private fun saveBibleResumeUrl(url: String) {
         if (!isBiblePlayableUrl(url)) return
-        prefs.edit().putString(KEY_LAST_BIBLE_URL, url).apply()
+
+        val oldUrl = prefs.getString(KEY_LAST_BIBLE_URL, null)
+        val isDifferentVideo = oldUrl == null || normalizeUrl(oldUrl) != normalizeUrl(url)
+
+        val editor = prefs.edit()
+            .putString(KEY_LAST_BIBLE_URL, url)
+
+        if (isDifferentVideo) {
+            editor.putFloat(KEY_LAST_BIBLE_POSITION, 0f)
+        }
+
+        editor.apply()
     }
 
     private fun getSavedBibleResumeUrl(): String? {
@@ -217,6 +239,26 @@ class FondantWebController(
         return prefs.getFloat(KEY_LAST_BIBLE_POSITION, 0f).toDouble()
     }
 
+    // [GPT 수정 4] 오염된 위치 한 번 정리 및 강제 삭제 함수
+    private fun clearCorruptedResumePositionOnce() {
+        if (prefs.getBoolean(KEY_RESUME_FIX_APPLIED, false)) return
+
+        prefs.edit()
+            .putFloat(KEY_LAST_BIBLE_POSITION, 0f)
+            .putBoolean(KEY_RESUME_FIX_APPLIED, true)
+            .apply()
+    }
+
+    private fun clearBibleResumePosition(url: String) {
+        if (!isBiblePlayableUrl(url)) return
+
+        prefs.edit()
+            .putString(KEY_LAST_BIBLE_URL, url)
+            .putFloat(KEY_LAST_BIBLE_POSITION, 0f)
+            .apply()
+    }
+
+    // [GPT 수정 6] 영상 끝부분이면 복원하지 않음
     private fun restoreBiblePositionIfNeeded(url: String) {
         val savedUrl = getSavedBibleResumeUrl() ?: return
         val savedPosition = getSavedBibleResumePosition()
@@ -229,8 +271,19 @@ class FondantWebController(
               try {
                 var v = document.querySelector('video');
                 if (!v) return;
-                if (Math.abs((v.currentTime || 0) - $savedPosition) > 2.0) {
-                  v.currentTime = $savedPosition;
+
+                var saved = $savedPosition;
+                var duration = Number(v.duration || 0);
+
+                // 저장 위치가 영상 끝부분이면 복원하지 않음
+                if (duration > 0 && saved >= duration - 3.0) {
+                  return;
+                }
+
+                if (saved < 2.0) return;
+
+                if (Math.abs((v.currentTime || 0) - saved) > 2.0) {
+                  v.currentTime = saved;
                 }
               } catch(e) {}
             })();
@@ -431,12 +484,19 @@ class FondantWebController(
                   v.muted = false;
                   try { v.volume = 1.0; } catch(e) {}
 
+                  // [GPT 수정 7] 영상 끝부분 3초 이내는 위치를 저장하지 않음
                   if (
                     u.indexOf('00090228-5db3-dc44-3c29-52bcaf0002ce') >= 0 &&
                     (u.indexOf('/play?') >= 0 || u.indexOf('/play/') >= 0 || u.indexOf('/watch') >= 0)
                   ) {
                     try {
-                      AndroidBot.onBibleProgress(u, Number(v.currentTime || 0));
+                      var current = Number(v.currentTime || 0);
+                      var duration = Number(v.duration || 0);
+                      var remain = duration > 0 ? duration - current : 9999;
+
+                      if (current > 1.0 && remain > 3.0 && !v.ended) {
+                        AndroidBot.onBibleProgress(u, current);
+                      }
                     } catch(e) {}
                   }
 
@@ -445,6 +505,11 @@ class FondantWebController(
                     v.duration > 0 &&
                     (v.duration - v.currentTime <= 1.0 || v.ended)
                   ) {
+                    // [GPT 수정 8] 다음 회차 넘어가기 직전에 확실하게 위치 0초로 정리
+                    try {
+                      AndroidBot.onBibleEpisodeEnded(u);
+                    } catch(e) {}
+
                     var tags = document.querySelectorAll('button, a, div, span, p');
                     for (var i = tags.length - 1; i >= 0; i--) {
                       var rawTxt = tags[i].innerText || '';

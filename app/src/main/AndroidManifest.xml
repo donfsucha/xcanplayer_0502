@@ -6,23 +6,22 @@
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="XCAN PLAYER"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+        android:usesCleartextTraffic="true">
 
         <!-- 앱이 켜질 때 가장 먼저 보여질 메인 화면 설정입니다. -->
         <activity
-            android:name="com.example.xcanplayer_final2.MainActivity"
+            android:name="com.cnanfc.xcanplayer.MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.action.LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- 기존에 추가하셨던 다른 화면(Activity)들이 있다면 이 아래에 위치하게 됩니다. -->
 
     </application>
-
 </manifest>

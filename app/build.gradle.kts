@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.cna.xcanplayer"
-    compileSdk = 34
+    namespace = "com.cnanfc.xcanplayer"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.cna.xcanplayer"
+        applicationId = "com.cnanfc.xcanplayer"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -1,4 +1,4 @@
-package com.example.xcanplayer_final2
+package com.cnanfc.xcanplayer
 
 import android.content.Context
 import org.json.JSONArray
